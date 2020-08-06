@@ -22,7 +22,7 @@ def to_hms(seconds):
     return f'{seconds // 3600:02d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}'
 
 
-def get_segment_raw_data_iter(config, title, video_path):
+def iter_segment_raw_data(config, title, video_path):
     segment_length = config['segment_length']
     video_sample_rate = config['video_sample_rate']
     video_width = config['video_width']
@@ -125,7 +125,7 @@ def generate_segment_data(config, title, video_path, hl_section_path, output_dat
     start = dt.now()
 
     saved_segment_count = 0
-    for i, raw_data in enumerate(get_segment_raw_data_iter(config, title, video_path)):
+    for i, raw_data in enumerate(iter_segment_raw_data(config, title, video_path)):
         # segment별로 추출된 raw data
         video_frames, audio_frames, segment_start_sec, segment_end_sec, total_duration, original_frame_rate = raw_data
 
