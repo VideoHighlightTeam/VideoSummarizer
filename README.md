@@ -55,7 +55,7 @@ Google Colab과 Jupyter Notebook, Shell 모두에서 실행 가능하다.
 
 #### * Jupyter Notebook
 우선 구글드라이브에서 사용할 데이터셋 파일을 로컬에 복사하고 압축을 해제한다. (예: dataset14_sl5_vsr3_vw64_vh64_asr11025.zip)
-소스코드 중 **run_trainer.ipynb** 노트북 파일이 있으며 이것을 실행하고 압축을 푼 경로를 dataset_dir에 지정해주면 모델 생성 및 학습을 진행할 수 있다.
+소스코드 중 **run_trainer.ipynb** 노트북 파일이 있으며 이것을 실행하고 데이터셋의 압축을 푼 경로를 dataset_dir에 지정해주면 모델 생성 및 학습을 진행할 수 있다.
 
 #### * Shell
 ```
