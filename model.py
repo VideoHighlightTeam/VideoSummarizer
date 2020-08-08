@@ -4,8 +4,8 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras.models import Model
 
 
-def c3d_model():
-    input_shape = (15, 64, 64, 3)
+def c3d_model(frames, width, height, channels):
+    input_shape = (frames, height, width, channels)
     weight_decay = 0.005
     # nb_classes = 2
 

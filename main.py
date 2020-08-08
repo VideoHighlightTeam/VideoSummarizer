@@ -34,7 +34,13 @@ mode = args.mode
 
 def main():
     data_loader = DataLoader(data_dir)
-    model = YasuoNet()
+    data_config = data_loader.get_metadata()['config']
+    video_frames = int(data_config['segment_length'] * data_config['video_sample_rate'])
+    video_width = data_config['video_width']
+    video_height = data_config['video_height']
+    video_channels = 3  # 향후 메타데이터에서 읽어오도록 수정
+
+    model = YasuoNet(video_frames, video_width, video_height, video_channels)
 
     if mode == 'train':
         # epoch 당 배치 수

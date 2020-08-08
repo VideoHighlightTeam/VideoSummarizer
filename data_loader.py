@@ -3,6 +3,7 @@ import glob
 import numpy as np
 import pandas as pd
 import hashlib
+import json
 from functools import reduce
 
 import util.collection_util as cu
@@ -19,9 +20,21 @@ class DataLoader:
         self.valid_prop = valid_prop
         self.test_prop = 1 - train_prop - valid_prop
 
+        self.metadata = None
+
+        self._load_metadata()
+
         self.all_segment_df = self._get_all_segment_df()
 
         self.train_segment_df, self.valid_segment_df, self.test_segment_df = self._split_dataset()
+
+    def _load_metadata(self):
+        metadata_path = os.path.join(self.dataset_dir, 'metadata.json')
+        with open(metadata_path, 'r') as f:
+            self.metadata = json.load(f)
+
+    def get_metadata(self):
+        return self.metadata
 
     def _get_all_segment_df(self):
         all_segment_path_list = sorted(glob.glob(self.dataset_dir + '/*/*.pkl'))
