@@ -1,9 +1,10 @@
 import os
 from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.models import Model
 
 
-class Trainer():
-    def __init__(self, model, ckpt_dir, learning_rate, epochs):
+class Trainer:
+    def __init__(self, model: Model, ckpt_dir, learning_rate, epochs, class_weight=None):
         super(Trainer, self).__init__()
         self.callbacks = []
         self.loss = []
@@ -14,6 +15,7 @@ class Trainer():
         self.ckpt_dir = ckpt_dir
         self.learning_rate = learning_rate
         self.epochs = epochs
+        self.class_weight = class_weight
         # self.result_dir = result_dir
 
         if not os.path.exists(ckpt_dir):
@@ -41,6 +43,7 @@ class Trainer():
             callbacks=self.callbacks,
             validation_data=valid_batch_generator,
             validation_steps=valid_steps_per_epoch,
+            class_weight=self.class_weight,
             verbose=1
         )
         self.loss.extend(history.history['loss'])
