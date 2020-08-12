@@ -2,33 +2,31 @@ from data_loader import DataLoader
 from model import c3d_model as YasuoNet
 from trainer import Trainer
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.metrics import Precision, Recall
+from sklearn.utils import class_weight
+import numpy as np
 import argparse
 import math
 
 parser = argparse.ArgumentParser(description="Train YasuoNet", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+parser.add_argument("--mode", default='train', type=str, dest='mode', required=True)
+parser.add_argument("--data_dir", type=str, dest='data_dir', required=True)
+parser.add_argument("--batch_size", type=int, dest='batch_size', required=True)
+parser.add_argument("--epochs", type=int, dest='epochs', required=True)
 parser.add_argument("--learning_rate", default=1e-3, type=float, dest='learning_rate')
-parser.add_argument("--epochs", default=10, type=int, dest='epochs')
-parser.add_argument("--batch_size", default=2, type=int, dest='batch_size')
-parser.add_argument("--data_dir", default='./data', type=str, dest='data_dir')
-parser.add_argument("--log_dir", default='./log', type=str, dest='log_dir')
 parser.add_argument("--ckpt_dir", default='./checkpoint', type=str, dest='ckpt_dir')
-# parser.add_argument("--result_dir", default='./results', type=str, dest='result_dir')
-
-parser.add_argument("--mode", default='train', type=str, dest='mode')
 # parser.add_argument("--train_continue", default='off', type=str, dest='train_continue')
 
 args = parser.parse_args()
 
 # parameter
-learning_rate = args.learning_rate
-epochs = args.epochs
-batch_size = args.batch_size
-data_dir = args.data_dir
-log_dir = args.log_dir
-ckpt_dir = args.ckpt_dir
-# result_dir = args.result_dir
 mode = args.mode
+data_dir = args.data_dir
+batch_size = args.batch_size
+epochs = args.epochs
+learning_rate = args.learning_rate
+ckpt_dir = args.ckpt_dir
 # train_continue = args.train_continue
 
 
@@ -47,9 +45,12 @@ def main():
         train_steps = data_loader.get_train_data_count() // batch_size
         valid_steps = math.ceil(data_loader.get_valid_data_count() / batch_size)
 
-        model.compile(Adam(learning_rate), loss='binary_crossentropy', metrics=['accuracy'])
+        model.compile(Adam(learning_rate), loss='binary_crossentropy', metrics=['accuracy', Precision(name='precision'), Recall(name='recall')])
 
-        trainer = Trainer(model, ckpt_dir, learning_rate, epochs)
+        class_weights = class_weight.compute_class_weight('balanced', classes=range(data_loader.CLASS_COUNT), y=data_loader.all_segment_df['label'].to_numpy())
+        class_weights = {i: v for i, v in enumerate(class_weights)}
+
+        trainer = Trainer(model, ckpt_dir, learning_rate, epochs, class_weights)
         trainer.train(
             data_loader.iter_train_batch_data(batch_size), train_steps,
             data_loader.iter_valid_batch_data(batch_size), valid_steps
