@@ -1,22 +1,27 @@
 import os
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.models import Model
+from datetime import datetime as dt
 
 
 class Trainer:
     def __init__(self, model: Model, ckpt_dir, learning_rate, epochs, class_weight=None):
-        super(Trainer, self).__init__()
-        self.callbacks = []
-        self.loss = []
-        self.acc = []
-        self.val_loss = []
-        self.val_acc = []
+        # super(Trainer, self).__init__()
         self.model = model
         self.ckpt_dir = ckpt_dir
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.class_weight = class_weight
-        # self.result_dir = result_dir
+
+        self.callbacks = []
+        self.loss = []
+        self.accuracy = []
+        self.precision = []
+        self.recall = []
+        self.val_loss = []
+        self.val_accuracy = []
+        self.val_precision = []
+        self.val_recall = []
 
         if not os.path.exists(ckpt_dir):
             os.makedirs(ckpt_dir)
@@ -24,9 +29,10 @@ class Trainer:
         self.init_callbacks()
 
     def init_callbacks(self):
+        ckpt_filename_format = 'ckpt-' + dt.now().strftime('%Y%m%d-%H%M%S') + '-{epoch:04d}-{val_loss:.4f}.hdf5'
         self.callbacks.append(
             ModelCheckpoint(
-                filepath=os.path.join(self.ckpt_dir, 'ckpt-{epoch:04d}-{val_loss:.4f}.hdf5'),
+                filepath=os.path.join(self.ckpt_dir, ckpt_filename_format),
                 monitor='val_loss',
                 mode='min',
                 save_best_only=True,
@@ -47,9 +53,13 @@ class Trainer:
             verbose=1
         )
         self.loss.extend(history.history['loss'])
-        self.acc.extend(history.history['accuracy'])
+        self.accuracy.extend(history.history['accuracy'])
+        self.precision.extend(history.history['precision'])
+        self.recall.extend(history.history['recall'])
         self.val_loss.extend(history.history['val_loss'])
-        self.val_acc.extend(history.history['val_accuracy'])
+        self.val_accuracy.extend(history.history['val_accuracy'])
+        self.val_precision.extend(history.history['val_precision'])
+        self.val_recall.extend(history.history['val_recall'])
 
     def test(self, test_batch_generator, test_steps_per_epoch):
         self.model.evaluate(test_batch_generator, steps=test_steps_per_epoch)
