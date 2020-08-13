@@ -14,8 +14,9 @@ class DataLoader:
 
     CLASS_COUNT = 2
 
-    def __init__(self, dataset_dir, train_prop=0.6, valid_prop=0.2):
+    def __init__(self, dataset_dir, x_includes, train_prop=0.6, valid_prop=0.2):
         self.dataset_dir = dataset_dir
+        self.x_includes = x_includes
         self.train_prop = train_prop
         self.valid_prop = valid_prop
         self.test_prop = 1 - train_prop - valid_prop
@@ -99,7 +100,7 @@ class DataLoader:
             # 각 label별로 배치 데이터에 포함될 개수
             label_size = np.zeros(self.CLASS_COUNT, dtype=np.int)
             for c in range(self.CLASS_COUNT - 1):
-                label_size[c] = int(len(segment_label_df[c]) / len(self.train_segment_df) * batch_size)
+                label_size[c] = len(segment_label_df[c]) * batch_size // len(self.train_segment_df)
             label_size[-1] = batch_size - label_size.sum()
 
             # 전체 학습 데이터에서 현재 iterator의 위치
@@ -119,14 +120,20 @@ class DataLoader:
                     batch_data += [cu.load(segment['path']) for _, segment in label_batch_df[c].iterrows()]
 
                 # x, y 데이터 분리
-                # batch_data_x, batch_data_y = zip(*[((segment['video'], segment['audio']), segment['label']) for segment in batch_data])
-                batch_data_x, batch_data_y = zip(*[(segment['video'], segment['label']) for segment in batch_data])
+                batch_x_video, batch_x_audio, batch_y = zip(*[(segment['video'], segment['audio'], segment['label']) for segment in batch_data])
 
-                batch_data_x = np.array(batch_data_x)
-                batch_data_y = np.array(batch_data_y).reshape(-1, 1)
+                batch_x_video = np.array(batch_x_video)
+                batch_x_audio = np.array(batch_x_audio)
+                batch_y = np.array(batch_y).reshape(-1, 1)
 
                 # 데이터를 iterator로 반환
-                yield batch_data_x, batch_data_y
+                batch_x = []
+                if 'video' in self.x_includes:
+                    batch_x.append(batch_x_video)
+                if 'audio' in self.x_includes:
+                    batch_x.append(batch_x_audio)
+
+                yield batch_x, batch_y
 
                 i += label_size
 
@@ -167,14 +174,20 @@ class DataLoader:
                 batch_data = [cu.load(segment['path']) for _, segment in batch_df.iterrows()]
 
                 # x, y 데이터 분리
-                # batch_data_x, batch_data_y = zip(*[((segment['video'], segment['audio']), segment['label']) for segment in batch_data])
-                batch_data_x, batch_data_y = zip(*[(segment['video'], segment['label']) for segment in batch_data])
+                batch_x_video, batch_x_audio, batch_y = zip(*[(segment['video'], segment['audio'], segment['label']) for segment in batch_data])
 
-                batch_data_x = np.array(batch_data_x)
-                batch_data_y = np.array(batch_data_y).reshape(-1, 1)
+                batch_x_video = np.array(batch_x_video)
+                batch_x_audio = np.array(batch_x_audio)
+                batch_y = np.array(batch_y).reshape(-1, 1)
 
                 # 데이터를 iterator로 반환
-                yield batch_data_x, batch_data_y
+                batch_x = []
+                if 'video' in self.x_includes:
+                    batch_x.append(batch_x_video)
+                if 'audio' in self.x_includes:
+                    batch_x.append(batch_x_audio)
+
+                yield batch_x, batch_y
 
                 i += batch_size
 

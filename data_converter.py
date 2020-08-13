@@ -6,6 +6,7 @@ import pandas as pd
 import math
 from datetime import datetime as dt
 import moviepy.editor as moviepy
+import librosa
 from pprint import pprint as pp
 import multiprocessing as mp
 from itertools import repeat
@@ -28,11 +29,12 @@ def iter_segment_raw_data(config, title, video_path):
     video_width = config['video_width']
     video_height = config['video_height']
     audio_sample_rate = config['audio_sample_rate']
+    apply_mfcc = config['apply_mfcc']
 
     clip = moviepy.VideoFileClip(video_path)
     # video/audio clip에 sample rate 변경, resize 적용
     video_clip = clip.resize(newsize=(video_width, video_height)).set_fps(video_sample_rate)
-    audio_clip = clip.audio.set_fps(audio_sample_rate)
+    audio_clip = clip.audio.set_fps(audio_sample_rate).audio_normalize()
 
     print(f'{title} :: video_frame_rate: {clip.fps:.2f}, duration: {clip.duration:.2f}, size: {clip.size}, audio_frame_rate: {clip.audio.fps}')
 
@@ -46,7 +48,10 @@ def iter_segment_raw_data(config, title, video_path):
         subclip = video_clip.subclip(segment_start_sec, min(segment_end_sec, video_clip.duration))
 
         # video frame 추출
-        video_frames = np.array(list(subclip.iter_frames())).astype(np.float16) / 255
+        video_frames = np.array(list(subclip.iter_frames())).astype(np.float16)
+
+        # normalize to (0, 1)
+        video_frames /= 255
 
         correct_video_frame_count = int(segment_length * video_sample_rate)
         # 마지막 segment일 때 frame count가 모자라면 zero padding 적용
@@ -61,12 +66,12 @@ def iter_segment_raw_data(config, title, video_path):
             print(f'ERROR: {title} :: video frame count is not correct. ({video_frames.shape[0]}, {correct_video_frame_count})')
             raise e
 
-        # print(video_frames.shape, video_frames.dtype)
+        video_data = video_frames
+        # print(video_data.shape, video_data.dtype)
 
         # audio 추출
         subclip = audio_clip.subclip(segment_start_sec, min(segment_end_sec, video_clip.duration))
-        # audio_frames = np.array(list(subclip.iter_frames()))
-        audio_frames = subclip.to_soundarray().astype(np.float16)
+        audio_frames = subclip.to_soundarray().astype(np.float16)   # value range (-1, 1)
 
         correct_audio_frame_count = int(segment_length * audio_sample_rate)
         # 마지막 segment일 때 frame count가 모자라면 zero padding 적용
@@ -81,9 +86,24 @@ def iter_segment_raw_data(config, title, video_path):
             print(f'ERROR: {title} :: audio frame count is not correct. ({audio_frames.shape[0]}, {correct_audio_frame_count})')
             raise e
 
-        # print(audio_frames.shape, audio_frames.dtype)
+        if audio_frames.ndim == 2 and audio_frames.shape[1] > 1:
+            # merge stereo to mono
+            audio_frames = audio_frames.mean(axis=1)
 
-        yield video_frames, audio_frames, segment_start_sec, segment_end_sec, clip.duration, clip.fps
+        if apply_mfcc:
+            # audio waveform에 dfcc 적용하여 특징값 추출
+            mfccs = librosa.feature.mfcc(y=audio_frames, sr=audio_sample_rate, n_mfcc=40)
+
+            # normalize by standard normal distribution
+            mfccs = (mfccs - mfccs.mean()) / (mfccs.std() + 1e-6)
+
+            audio_data = mfccs
+        else:
+            audio_data = audio_frames
+
+        # print(audio_data.shape, audio_data.dtype)
+
+        yield video_data, audio_data, segment_start_sec, segment_end_sec, clip.duration, clip.fps
 
 
 def get_segment_label(segment_start_frame, segment_end_frame, hl_section_df):
@@ -124,10 +144,10 @@ def generate_segment_data(config, title, video_path, hl_section_path, output_dat
 
     start = dt.now()
 
-    saved_segment_count = 0
+    output_path_list = []
     for i, raw_data in enumerate(iter_segment_raw_data(config, title, video_path)):
         # segment별로 추출된 raw data
-        video_frames, audio_frames, segment_start_sec, segment_end_sec, total_duration, original_frame_rate = raw_data
+        video_data, audio_data, segment_start_sec, segment_end_sec, total_duration, original_frame_rate = raw_data
 
         segment_start_frame = segment_start_sec * original_frame_rate
         segment_end_frame = segment_end_sec * original_frame_rate
@@ -139,8 +159,8 @@ def generate_segment_data(config, title, video_path, hl_section_path, output_dat
             print(f'{title} :: [{i}] {segment_start_frame:.2f} ({to_hms(segment_start_sec)}) - {segment_end_frame:.2f} ({to_hms(segment_end_sec)}) >>> label: {label}')
 
         segment_data = {
-            'video': video_frames,
-            'audio': audio_frames,
+            'video': video_data,
+            'audio': audio_data,
             'label': label,
             'start_sec': segment_start_sec,
             'end_sec': segment_end_sec,
@@ -151,18 +171,18 @@ def generate_segment_data(config, title, video_path, hl_section_path, output_dat
         output_path = os.path.join(output_segment_dir, f'seg_{i:05d}_{label}.pkl')
         cu.save(segment_data, output_path)
 
-        saved_segment_count += 1
+        output_path_list.append(output_path)
 
     end = dt.now()
-    print(f'{title} :: {saved_segment_count} segments saved, elapsed time: {end - start}s')
+    print(f'{title} :: {len(output_path_list)} segments saved, elapsed time: {end - start}s')
 
-    return saved_segment_count
+    return output_path_list
 
 
-def convert_data(input_video_dir, segment_length, video_sample_rate, video_width, video_height, audio_sample_rate, output_dataset_dir=None):
+def convert_data(input_video_dir, segment_length, video_sample_rate, video_width, video_height, audio_sample_rate, apply_mfcc, output_dataset_dir=None):
     # output_dataset_dir이 주어지지 않은 경우 기본값으로 정의
     if not output_dataset_dir:
-        output_dataset_dir = f'dataset_sl{segment_length}_vsr{video_sample_rate}_vw{video_width}_vh{video_height}_asr{audio_sample_rate}'
+        output_dataset_dir = f'dataset_sl{segment_length}_vsr{video_sample_rate}_vw{video_width}_vh{video_height}_asr{audio_sample_rate}{"_mfcc" if apply_mfcc else ""}'
 
     config = {
         'segment_length': segment_length,
@@ -170,6 +190,7 @@ def convert_data(input_video_dir, segment_length, video_sample_rate, video_width
         'video_width': video_width,
         'video_height': video_height,
         'audio_sample_rate': audio_sample_rate,
+        'apply_mfcc': apply_mfcc
     }
 
     print(f'input_video_dir: {input_video_dir}')
@@ -206,15 +227,21 @@ def convert_data(input_video_dir, segment_length, video_sample_rate, video_width
     # 각 원본영상과 highlight 구간 파일을 읽고 segment 단위로 나누어 저장
     with mp.Pool() as pool:
         params = zip(repeat(config), title_list, video_path_list, hl_section_path_list, repeat(output_dataset_dir))
-        segment_count_list = pool.starmap(generate_segment_data, params)
-        total_segment_count = sum(segment_count_list)
+        output_path_list_list = pool.starmap(generate_segment_data, params)
+        total_segment_count = sum(map(len, output_path_list_list))
+
+    # get video/audio data shape
+    segment_data = cu.load(output_path_list_list[0][0])
+    video_data_shape = segment_data['video'].shape
+    audio_data_shape = segment_data['audio'].shape
 
     # metadata 기록
     metadata = {
         'created': str(dt.now()),
         'config': config,
+        'data_shape': {'video': video_data_shape, 'audio': audio_data_shape},
         'total_segment_count': total_segment_count,
-        'segment_counts': {title: count for title, count in zip(title_list, segment_count_list)}
+        'segment_counts': {title: count for title, count in zip(title_list, map(len, output_path_list_list))}
     }
     metadata_path = os.path.join(output_dataset_dir, 'metadata.json')
     with open(metadata_path, 'w') as f:
@@ -227,15 +254,15 @@ def convert_data(input_video_dir, segment_length, video_sample_rate, video_width
 
 
 def print_usage():
-    print(f'Usage: python {sys.argv[0]} input_video_dir segment_length(sec) video_sample_rate(fps) video_width(px) video_height(px) audio_sample_rate(hz) [output_dataset_dir]')
+    print(f'Usage: python {sys.argv[0]} input_video_dir segment_length(sec) video_sample_rate(fps) video_width(px) video_height(px) audio_sample_rate(hz) apply_mfcc(0 or 1) [output_dataset_dir]')
     print()
     print('Example:')
-    print(f'python {sys.argv[0]} data/raw 5 3 64 64 11025')
-    print(f'python {sys.argv[0]} data/raw 3 6 128 128 22050 data/dataset1')
+    print(f'python {sys.argv[0]} data/raw 5 3 64 64 11025 0')
+    print(f'python {sys.argv[0]} data/raw 3 6 128 128 22050 1 data/dataset1')
 
 
 def main():
-    if len(sys.argv) < 7:
+    if len(sys.argv) < 8:
         print_usage()
         quit(1)
 
@@ -244,9 +271,10 @@ def main():
     video_sample_rate = float(sys.argv[3])
     video_width, video_height = map(int, sys.argv[4:6])
     audio_sample_rate = int(sys.argv[6])
-    output_dataset_dir = sys.argv[7] if len(sys.argv) > 7 else None
+    apply_mfcc = bool(sys.argv[7])
+    output_dataset_dir = sys.argv[8] if len(sys.argv) > 8 else None
 
-    convert_data(input_video_dir, segment_length, video_sample_rate, video_width, video_height, audio_sample_rate, output_dataset_dir)
+    convert_data(input_video_dir, segment_length, video_sample_rate, video_width, video_height, audio_sample_rate, apply_mfcc, output_dataset_dir)
 
 
 if __name__ == '__main__':

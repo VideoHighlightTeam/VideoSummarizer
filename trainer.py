@@ -2,6 +2,7 @@ import os
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.models import Model
 from datetime import datetime as dt
+from pytz import timezone
 
 
 class Trainer:
@@ -29,7 +30,8 @@ class Trainer:
         self.init_callbacks()
 
     def init_callbacks(self):
-        ckpt_filename_format = 'ckpt-' + dt.now().strftime('%Y%m%d-%H%M%S') + '-{epoch:04d}-{val_loss:.4f}.hdf5'
+        kst = timezone('Asia/Seoul')
+        ckpt_filename_format = 'ckpt-' + dt.now(tz=kst).strftime('%Y%m%d-%H%M%S') + '-{epoch:04d}-{val_loss:.4f}.hdf5'
         self.callbacks.append(
             ModelCheckpoint(
                 filepath=os.path.join(self.ckpt_dir, ckpt_filename_format),

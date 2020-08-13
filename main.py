@@ -31,26 +31,26 @@ ckpt_dir = args.ckpt_dir
 
 
 def main():
-    data_loader = DataLoader(data_dir)
-    data_config = data_loader.get_metadata()['config']
-    video_frames = int(data_config['segment_length'] * data_config['video_sample_rate'])
-    video_width = data_config['video_width']
-    video_height = data_config['video_height']
-    video_channels = 3  # 향후 메타데이터에서 읽어오도록 수정
+    data_loader = DataLoader(data_dir, ['video', 'audio'])
+    input_shape_dict = data_loader.get_metadata()['data_shape']
+    class_counts = data_loader.all_segment_df['label'].value_counts(sort=False)
 
-    model = YasuoNet(video_frames, video_width, video_height, video_channels)
+    model = YasuoNet(input_shape_dict)
 
     if mode == 'train':
+        class_weights = (1, 9)
+        class_weights = np.array(class_weights)
+        class_weight_dict = {c: class_weights[c] * class_counts.sum() / (class_weights * class_counts).sum() for c in range(data_loader.CLASS_COUNT)}
+
         # epoch 당 배치 수
         train_steps = data_loader.get_train_data_count() // batch_size
         valid_steps = math.ceil(data_loader.get_valid_data_count() / batch_size)
 
         model.compile(Adam(learning_rate), loss='binary_crossentropy', metrics=['accuracy', Precision(name='precision'), Recall(name='recall')])
 
-        class_weights = class_weight.compute_class_weight('balanced', classes=range(data_loader.CLASS_COUNT), y=data_loader.all_segment_df['label'].to_numpy())
-        class_weights = {i: v for i, v in enumerate(class_weights)}
+        model.summary()
 
-        trainer = Trainer(model, ckpt_dir, learning_rate, epochs, class_weights)
+        trainer = Trainer(model, ckpt_dir, learning_rate, epochs, class_weight_dict)
         trainer.train(
             data_loader.iter_train_batch_data(batch_size), train_steps,
             data_loader.iter_valid_batch_data(batch_size), valid_steps
