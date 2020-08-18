@@ -164,7 +164,7 @@ class Trainer:
         y_pred_list = []
         for x, y_true in self.data_loader.iter_test_batch_data(batch_size):
             pred = self.model.predict_on_batch(x)
-            pred = pred.numpy() if type(pred) != np.ndarray else pred
+            pred = pred.numpy() if not isinstance(pred, np.ndarray) else pred
             y_pred = (pred > 0.5) * 1
 
             y_true_list.append(y_true.squeeze())
@@ -176,7 +176,7 @@ class Trainer:
         y_pred_list = []
         for x, _ in self.data_loader.iter_test_batch_data(batch_size):
             pred = self.model.predict_on_batch(x)
-            pred = pred.numpy() if type(pred) != np.ndarray else pred
+            pred = pred.numpy() if not isinstance(pred, np.ndarray) else pred
             y_pred = (pred > 0.5) * 1
 
             y_pred_list.append(y_pred.squeeze())
