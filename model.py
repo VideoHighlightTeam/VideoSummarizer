@@ -26,7 +26,7 @@ def build_model(input_shape_dict):
     # Fully-connected layers
     fc_input = concatenate([video_output, audio_output])
     x = Dense(16, activation='relu', kernel_initializer='he_uniform', kernel_regularizer=l2(weight_decay))(fc_input)
-    #     x = Dropout(0.2)(x)
+    # x = Dropout(0.2)(x)
     fc_output = Dense(1, activation='sigmoid', kernel_initializer='he_uniform', kernel_regularizer=l2(weight_decay))(x)
 
     model = Model(inputs=[video_input, audio_input], outputs=fc_output)

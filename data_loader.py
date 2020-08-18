@@ -1,3 +1,4 @@
+import math
 import os
 import glob
 import numpy as np
@@ -87,80 +88,49 @@ class DataLoader:
     def get_all_data_count(self):
         return len(self.all_segment_df)
 
+    def get_train_batch_count(self, batch_size):
+        return self.get_train_data_count() // batch_size            # flooring
+
+    def get_valid_batch_count(self, batch_size):
+        return math.ceil(self.get_valid_data_count() / batch_size)  # ceiling
+
+    def get_test_batch_count(self, batch_size):
+        return math.ceil(self.get_test_data_count() / batch_size)   # ceiling
+
     def get_data_count_by_label(self, label):
         return sum(self.all_segment_df['label'] == label)
 
-    def iter_train_batch_data(self, batch_size, repeat=True):
+    def iter_train_batch_data(self, batch_size, repeat=False):
         """ 학습 데이터에서 batch_size만큼씩 중복없이 무작위 샘플하여 순차적으로 반환 """
-
-        # 전체 데이터를 순회할 때까지 반복
-        while True:
-            segment_label_df = [self.train_segment_df[self.train_segment_df['label'] == c].sample(frac=1) for c in range(self.CLASS_COUNT)]
-
-            # 각 label별로 배치 데이터에 포함될 개수
-            label_size = np.zeros(self.CLASS_COUNT, dtype=np.int)
-            for c in range(self.CLASS_COUNT - 1):
-                label_size[c] = len(segment_label_df[c]) * batch_size // len(self.train_segment_df)
-            label_size[-1] = batch_size - label_size.sum()
-
-            # 전체 학습 데이터에서 현재 iterator의 위치
-            i = np.zeros(self.CLASS_COUNT, dtype=np.int)
-
-            while True:
-                # 각 label별 배치 데이터 slicing
-                label_batch_df = [segment_label_df[c].iloc[i[c]: i[c] + label_size[c]] for c in range(self.CLASS_COUNT)]
-
-                # 레이블별로 가져온 데이터 수의 합이 batch_size보다 작으면 iteration 종료
-                if sum(map(len, label_batch_df)) < batch_size:
-                    break
-
-                # 모든 레이블 배치 데이터에 대해 segment 데이터 읽어와서 리스트 생성
-                batch_data = []
-                for c in range(self.CLASS_COUNT):
-                    batch_data += [cu.load(segment['path']) for _, segment in label_batch_df[c].iterrows()]
-
-                # x, y 데이터 분리
-                batch_x_video, batch_x_audio, batch_y = zip(*[(segment['video'], segment['audio'], segment['label']) for segment in batch_data])
-
-                batch_x_video = np.array(batch_x_video)
-                batch_x_audio = np.array(batch_x_audio)
-                batch_y = np.array(batch_y).reshape(-1, 1)
-
-                # 데이터를 iterator로 반환
-                batch_x = []
-                if 'video' in self.x_includes:
-                    batch_x.append(batch_x_video)
-                if 'audio' in self.x_includes:
-                    batch_x.append(batch_x_audio)
-
-                yield batch_x, batch_y
-
-                i += label_size
-
-            if not repeat:
+        for batch_x, batch_y in self._iter_subset_batch_data(self.train_segment_df, batch_size, repeat, True):
+            # 배치 크기에서 1개라도 모자라면 drop
+            if len(batch_y) < batch_size:
                 break
+            yield batch_x, batch_y
 
-
-    def iter_valid_batch_data(self, batch_size, repeat=True):
+    def iter_valid_batch_data(self, batch_size, repeat=False):
         """ 검증 데이터에서 batch_size만큼씩 순차적으로 반환 """
-        for batch_data in self._iter_subset_batch_data(self.valid_segment_df, batch_size, repeat):
+        for batch_data in self._iter_subset_batch_data(self.valid_segment_df, batch_size, repeat, False):
             yield batch_data
 
-    def iter_test_batch_data(self, batch_size, repeat=True):
+    def iter_test_batch_data(self, batch_size, repeat=False):
         """ 테스트 데이터에서 batch_size만큼씩 순차적으로 반환 """
-        for batch_data in self._iter_subset_batch_data(self.test_segment_df, batch_size, repeat):
+        for batch_data in self._iter_subset_batch_data(self.test_segment_df, batch_size, repeat, False):
             yield batch_data
 
-    def iter_all_batch_data(self, batch_size, repeat=True):
+    def iter_all_batch_data(self, batch_size, repeat=False):
         """ 전체 데이터에서 batch_size만큼씩 순차적으로 반환 """
-        for batch_data in self._iter_subset_batch_data(self.all_segment_df, batch_size, repeat):
+        for batch_data in self._iter_subset_batch_data(self.all_segment_df, batch_size, repeat, False):
             yield batch_data
 
-    def _iter_subset_batch_data(self, subset_df, batch_size, repeat=True):
+    def _iter_subset_batch_data(self, subset_df, batch_size, repeat, shuffle):
         # 전체 데이터를 순회할 때까지 반복
         while True:
             # 주어진 데이터에서 현재 iterator의 위치
             i = 0
+
+            if shuffle:
+                subset_df = subset_df.sample(frac=1)
 
             while True:
                 # 배치 데이터 slicing

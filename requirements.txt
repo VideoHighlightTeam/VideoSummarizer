@@ -3,3 +3,4 @@ pandas
 moviepy==1.0.3
 tensorflow>=2.1.0
 librosa
+tqdm
