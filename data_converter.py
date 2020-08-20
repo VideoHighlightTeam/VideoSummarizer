@@ -92,7 +92,7 @@ def iter_segment_raw_data(config, title, video_path):
 
         if apply_mfcc:
             # audio waveform에 dfcc 적용하여 특징값 추출
-            mfccs = librosa.feature.mfcc(y=audio_frames, sr=audio_sample_rate, n_mfcc=40)
+            mfccs = librosa.feature.mfcc(y=audio_frames, sr=audio_sample_rate, n_mfcc=40).astype(np.float16)
 
             # normalize by standard normal distribution
             mfccs = (mfccs - mfccs.mean()) / (mfccs.std() + 1e-6)

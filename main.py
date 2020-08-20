@@ -1,9 +1,7 @@
 from data_loader import DataLoader
-from model import build_model
+from model import *
 from trainer import Trainer
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.metrics import Precision, Recall
-import numpy as np
 import argparse
 
 parser = argparse.ArgumentParser(description="Train YasuoNet", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -29,15 +27,20 @@ ckpt_dir = args.ckpt_dir
 
 
 def main():
-    data_loader = DataLoader(data_dir, ['video', 'audio'])
-    input_shape_dict = data_loader.get_metadata()['data_shape']
+    # for basic model
+    # data_loader = DataLoader(data_dir, x_includes=['video', 'audio'])
+    # input_shape_dict = data_loader.get_metadata()['data_shape']
+    # model = build_basic_model(input_shape_dict)
 
-    model = build_model(input_shape_dict)
+    # for sequence model
+    data_loader = DataLoader(data_dir, x_includes=['video', 'audio'], x_expand=2)
+    input_shape_dict = data_loader.get_metadata()['data_shape']
+    model = build_sequence_model(input_shape_dict)
 
     if mode == 'train':
         model.summary()
 
-        class_weights = (1, 8)
+        class_weights = (1, 1)
 
         trainer = Trainer(model, data_loader, ckpt_dir)
         trainer.train(Adam(learning_rate), epochs, batch_size, class_weights)

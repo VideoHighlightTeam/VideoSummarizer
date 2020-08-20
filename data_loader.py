@@ -15,9 +15,10 @@ class DataLoader:
 
     CLASS_COUNT = 2
 
-    def __init__(self, dataset_dir, x_includes, train_prop=0.6, valid_prop=0.2):
+    def __init__(self, dataset_dir, x_includes, x_expand=0, train_prop=0.6, valid_prop=0.2):
         self.dataset_dir = dataset_dir
         self.x_includes = x_includes
+        self.x_expand = x_expand
         self.train_prop = train_prop
         self.valid_prop = valid_prop
         self.test_prop = 1 - train_prop - valid_prop
@@ -141,13 +142,43 @@ class DataLoader:
                     break
 
                 # 모든 배치 데이터에 대해 segment 데이터 읽어와서 리스트 생성
-                batch_data = [cu.load(segment['path']) for _, segment in batch_df.iterrows()]
+                batch_data = []
+                for _, segment in batch_df.iterrows():
+                    target_segment_data = cu.load(segment['path'])
+
+                    # 시간값 추가
+                    target_segment_data['time'] = target_segment_data['start_sec'] / target_segment_data['total_duration']
+
+                    if self.x_expand > 0:
+                        # 앞/뒤 segment 결합
+                        segment_data_list = []
+                        title = segment['title']
+                        target_index = segment['index']
+                        title_segment_df = subset_df[(subset_df['title'] == title)].set_index('index')
+                        segment_data_zero = {'video': np.zeros_like(target_segment_data['video']), 'audio': np.zeros_like(target_segment_data['audio'])}
+
+                        for index in range(target_index - self.x_expand, target_index + self.x_expand + 1):
+                            if index == target_index:
+                                segment_data_list.append(target_segment_data)
+                            elif index in title_segment_df.index:
+                                segment_data_list.append(cu.load(title_segment_df.loc[index]['path']))
+                            else:
+                                segment_data_list.append(segment_data_zero)
+
+                        video_list, audio_list = zip(*[(s['video'], s['audio']) for s in segment_data_list])
+
+                        # 원본 데이터 교체
+                        target_segment_data['video'] = np.array(video_list)
+                        target_segment_data['audio'] = np.array(audio_list)
+
+                    batch_data.append(target_segment_data)
 
                 # x, y 데이터 분리
-                batch_x_video, batch_x_audio, batch_y = zip(*[(segment['video'], segment['audio'], segment['label']) for segment in batch_data])
+                batch_x_video, batch_x_audio, batch_x_time, batch_y = zip(*[(s['video'], s['audio'], s['time'], s['label']) for s in batch_data])
 
-                batch_x_video = np.array(batch_x_video)
-                batch_x_audio = np.array(batch_x_audio)
+                batch_x_video = np.array(batch_x_video, dtype=np.float16)
+                batch_x_audio = np.array(batch_x_audio, dtype=np.float16)
+                batch_x_time = np.array(batch_x_time, dtype=np.float16)
                 batch_y = np.array(batch_y).reshape(-1, 1)
 
                 # 데이터를 iterator로 반환
@@ -156,6 +187,8 @@ class DataLoader:
                     batch_x.append(batch_x_video)
                 if 'audio' in self.x_includes:
                     batch_x.append(batch_x_audio)
+                if 'time' in self.x_includes:
+                    batch_x.append(batch_x_time)
 
                 yield batch_x, batch_y
 
