@@ -7,6 +7,7 @@ from pytz import timezone
 from tqdm.auto import tqdm
 from functools import cmp_to_key
 import pandas as pd
+from sklearn.metrics import confusion_matrix
 
 from data_loader import DataLoader
 
@@ -154,6 +155,7 @@ class Trainer:
                 loss, accuracy, precision, recall = self.model.test_on_batch(x, y, reset_metrics=False)
                 f1score = calc_f1score(precision, recall)
 
+                # print metrics
                 metric_str = f'loss: {loss:.4f}, accuracy: {accuracy:.4f}, precision: {precision:.4f}, recall: {recall:.4f}, f1score: {f1score:.4f}'
                 pbar.set_postfix_str(metric_str)
 
@@ -162,13 +164,31 @@ class Trainer:
     def test_prediction(self, batch_size):
         y_true_list = []
         y_pred_list = []
-        for x, y_true in self.data_loader.iter_test_batch_data(batch_size):
-            pred = self.model.predict_on_batch(x)
-            pred = pred.numpy() if not isinstance(pred, np.ndarray) else pred
-            y_pred = (pred > 0.5) * 1
 
-            y_true_list.append(y_true.squeeze())
-            y_pred_list.append(y_pred.squeeze())
+        batch_generator = self.data_loader.iter_test_batch_data(batch_size)
+        batch_count = self.data_loader.get_test_batch_count(batch_size)
+        description = f'Test'
+        conf_mat = np.zeros((2, 2), dtype=np.int32)
+        with tqdm(batch_generator, total=batch_count, desc=description) as pbar:
+            # batch 수만큼 반복
+            for x, y_true in pbar:
+                pred = self.model.predict_on_batch(x)
+                pred = pred if isinstance(pred, np.ndarray) else pred.numpy()
+                y_pred = (pred > 0.5) * 1
+
+                y_true_list.append(y_true.squeeze())
+                y_pred_list.append(y_pred.squeeze())
+
+                # print metrics
+                conf_mat += confusion_matrix(y_true, y_pred, labels=range(DataLoader.CLASS_COUNT))
+
+                accuracy = (conf_mat[0, 0] + conf_mat[1, 1]) / (conf_mat.sum() + 1e-7)
+                precision = conf_mat[1, 1] / (conf_mat[:, 1].sum() + 1e-7)
+                recall = conf_mat[1, 1] / (conf_mat[1, :].sum() + 1e-7)
+                f1score = calc_f1score(precision, recall)
+
+                metric_str = f'accuracy: {accuracy:.4f}, precision: {precision:.4f}, recall: {recall:.4f}, f1score: {f1score:.4f}'
+                pbar.set_postfix_str(metric_str)
 
         return np.concatenate(y_true_list), np.concatenate(y_pred_list)
 

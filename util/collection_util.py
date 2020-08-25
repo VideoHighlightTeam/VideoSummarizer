@@ -21,3 +21,17 @@ def load(filename, compressed=False):
     else:
         with open(filename, 'rb') as f:
             return pickle.load(f)
+
+
+def list_to_dict(values, keys):
+    """ key를 value 아이템들의 list로 매핑하는 dict를 반환
+     Ex) [item1, item2, item3] => {'key1': [item1, item3], 'key2': [item2]} """
+    # convert function to iterable
+    if callable(keys):
+        keys = map(keys, values)
+
+    root = {}
+    for key, value in zip(keys, values):
+        nested = root.setdefault(key, [])
+        nested.append(value)
+    return root

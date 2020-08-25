@@ -6,6 +6,8 @@ import pandas as pd
 import hashlib
 import json
 from functools import reduce
+from operator import itemgetter
+import itertools
 
 import util.collection_util as cu
 
@@ -27,7 +29,10 @@ class DataLoader:
 
         self._load_metadata()
 
-        self.all_segment_df = self._get_all_segment_df()
+        all_segment_list = self._get_all_segment_list()
+        self.all_segment_df = pd.DataFrame(all_segment_list)
+        # segment sequence 데이터 생성 시 성능 향상을 위해 dictionary 구조 병행 사용
+        self.all_segment_dict = cu.list_to_dict(all_segment_list, itemgetter('title'))
 
         self.train_segment_df, self.valid_segment_df, self.test_segment_df = self._split_dataset()
 
@@ -39,13 +44,13 @@ class DataLoader:
     def get_metadata(self):
         return self.metadata
 
-    def _get_all_segment_df(self):
+    def _get_all_segment_list(self):
         all_segment_path_list = sorted(glob.glob(self.dataset_dir + '/*/*.pkl'))
 
         # segment 정보를 1차원 리스트로 나열
         all_segment_list = []
         for path in all_segment_path_list:
-            # dir: 원본영상 이름, name: 파일 이름
+            # title: 원본영상 이름, name: 파일 이름
             title, name = os.path.normpath(path).split(os.sep)[-2:]
             name = os.path.splitext(name)[0]
             # 원본영상 내의 segment index
@@ -55,7 +60,7 @@ class DataLoader:
 
             all_segment_list.append({'title': title, 'name': name, 'index': index, 'label': label, 'path': path})
 
-        return pd.DataFrame(all_segment_list)
+        return all_segment_list
 
     def _split_dataset(self):
         def get_subset(title):
@@ -154,14 +159,14 @@ class DataLoader:
                         segment_data_list = []
                         title = segment['title']
                         target_index = segment['index']
-                        title_segment_df = subset_df[(subset_df['title'] == title)].set_index('index')
+                        title_segment_list = self.all_segment_dict[title]
                         segment_data_zero = {'video': np.zeros_like(target_segment_data['video']), 'audio': np.zeros_like(target_segment_data['audio'])}
 
                         for index in range(target_index - self.x_expand, target_index + self.x_expand + 1):
                             if index == target_index:
                                 segment_data_list.append(target_segment_data)
-                            elif index in title_segment_df.index:
-                                segment_data_list.append(cu.load(title_segment_df.loc[index]['path']))
+                            elif 0 <= index < len(title_segment_list):
+                                segment_data_list.append(cu.load(title_segment_list[index]['path']))
                             else:
                                 segment_data_list.append(segment_data_zero)
 
